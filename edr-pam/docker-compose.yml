@@ -1,0 +1,43 @@
+services:
+  db-init:
+    image: pgvector/pgvector:pg16
+    container_name: edr-pam-db-init
+    entrypoint: ["/bin/sh", "/init-db.sh"]
+    volumes:
+      - ./docker/init-db.sh:/init-db.sh:ro
+    networks:
+      - videoanalysis_default
+    restart: "no"
+
+  api:
+    build:
+      context: ./backend
+    image: edr-pam-api:0.1.0
+    container_name: edr-pam-api
+    environment:
+      DATABASE_URL: postgresql+psycopg://va:va@video-analysis-db:5432/edr_pam
+    ports:
+      - "8001:8001"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    networks:
+      - videoanalysis_default
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+    image: edr-pam-web:0.1.0
+    container_name: edr-pam-web
+    ports:
+      - "5174:80"
+    depends_on:
+      - api
+    networks:
+      - videoanalysis_default
+    restart: unless-stopped
+
+networks:
+  videoanalysis_default:
+    external: true

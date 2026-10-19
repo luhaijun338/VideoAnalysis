@@ -1,0 +1,69 @@
+name: videoanalysis
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: video-analysis-db
+    environment:
+      POSTGRES_USER: va
+      POSTGRES_PASSWORD: va
+      POSTGRES_DB: video_analysis
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U va -d video_analysis"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7
+    container_name: video-analysis-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: video-analysis:0.1.0
+    container_name: video-analysis-app
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://va:va@db:5432/video_analysis
+      REDIS_URL: redis://redis:6379/0
+      DATA_DIR: /data/videos
+      SPA_DIR: /app/spa
+    volumes:
+      - ./data/videos:/data/videos
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 18
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  pgdata:
